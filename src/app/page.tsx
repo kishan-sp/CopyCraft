@@ -1,25 +1,26 @@
 'use client';
 
 import { useState, useMemo, useEffect, useTransition } from 'react';
-import { WritingMode, AnalysisResult, SentenceAnalysis } from '@/lib/types';
+import { WritingMode, AnalysisResult, SentenceAnalysis, SentenceRole } from '@/lib/types';
 import { analyzeLocally } from '@/lib/heuristics';
 
 const SAMPLE_TEXT = `Everyone thinks training larger models is the only path to better AI accuracy. They are wrong because scaling parameters hits severe memory bottlenecks on edge devices. Instead, we compressed a 7B model down to 1.8GB using 4-bit quantization, maintaining 94.2% benchmark accuracy across 100K images. This cuts deployment latency by 60% and saves $12K monthly in cloud compute costs.`;
 
-const ROLE_TEXT_COLORS = {
-  hook: 'text-rose-400 dark:text-rose-400',
-  tension: 'text-orange-400 dark:text-orange-400',
-  resolution: 'text-amber-300 dark:text-amber-300',
-  proof: 'text-purple-400 dark:text-purple-400',
-  neutral: 'text-neutral-400 dark:text-neutral-300'
-};
+const NARRATIVE_CYCLE_COLORS = [
+  { textColor: 'text-rose-400 dark:text-rose-400', hex: '#fb7185' },
+  { textColor: 'text-orange-400 dark:text-orange-400', hex: '#fb923c' },
+  { textColor: 'text-amber-300 dark:text-amber-300', hex: '#facc15' },
+  { textColor: 'text-emerald-400 dark:text-emerald-400', hex: '#34d399' },
+  { textColor: 'text-purple-400 dark:text-purple-400', hex: '#c084fc' },
+  { textColor: 'text-sky-400 dark:text-sky-400', hex: '#38bdf8' }
+];
 
-const ROLE_HEX_COLORS: Record<string, string> = {
-  hook: '#fb7185',
-  tension: '#fb923c',
-  resolution: '#facc15',
-  proof: '#c084fc',
-  neutral: '#9ca3af'
+const ROLE_BASE_COLOR_INDEX: Record<SentenceRole, number> = {
+  hook: 0,       // Rose
+  tension: 1,    // Orange
+  resolution: 2, // Amber
+  proof: 4,      // Purple
+  neutral: -1
 };
 
 const ROLE_LABELS = {
@@ -30,12 +31,42 @@ const ROLE_LABELS = {
   neutral: 'Narrative'
 };
 
+// Guarantees that every sentence end triggers an immediate color change
+function computeSentenceColors(sentences: SentenceAnalysis[]) {
+  const result: { textColor: string; hex: string }[] = [];
+
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i];
+    const prevHex = i > 0 ? result[i - 1].hex : null;
+
+    let colorIndex: number;
+
+    if (s.role !== 'neutral' && ROLE_BASE_COLOR_INDEX[s.role] !== undefined) {
+      colorIndex = ROLE_BASE_COLOR_INDEX[s.role];
+      if (prevHex && NARRATIVE_CYCLE_COLORS[colorIndex].hex === prevHex) {
+        colorIndex = (colorIndex + 1) % NARRATIVE_CYCLE_COLORS.length;
+      }
+    } else {
+      colorIndex = i % NARRATIVE_CYCLE_COLORS.length;
+      if (prevHex && NARRATIVE_CYCLE_COLORS[colorIndex].hex === prevHex) {
+        colorIndex = (colorIndex + 1) % NARRATIVE_CYCLE_COLORS.length;
+      }
+    }
+
+    result.push(NARRATIVE_CYCLE_COLORS[colorIndex]);
+  }
+
+  return result;
+}
+
 function CadenceLineGraph({
   sentences,
+  sentenceColors,
   selectedIndex,
   onSelect
 }: {
   sentences: SentenceAnalysis[];
+  sentenceColors: { textColor: string; hex: string }[];
   selectedIndex: number | null;
   onSelect: (index: number) => void;
 }) {
@@ -121,7 +152,7 @@ function CadenceLineGraph({
           )}
 
           {points.map((pt) => {
-            const roleColor = ROLE_HEX_COLORS[pt.sentence.role] || '#9ca3af';
+            const ptColor = sentenceColors[pt.index]?.hex || '#9ca3af';
             const isSelected = selectedIndex === pt.index;
             return (
               <g
@@ -133,7 +164,7 @@ function CadenceLineGraph({
                   cx={pt.x}
                   cy={pt.y}
                   r={isSelected ? '6.5' : pt.sentence.isMonotonous ? '5.5' : '4'}
-                  fill={roleColor}
+                  fill={ptColor}
                   stroke={isSelected ? '#ffffff' : pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
                   strokeWidth="2"
                   className="transition-transform hover:scale-125"
@@ -228,6 +259,12 @@ export default function Page() {
 
   const localAnalysis = useMemo(() => analyzeLocally(text, mode), [text, mode]);
   const activeAnalysis = auditResult || localAnalysis;
+  
+  // Calculate distinct alternating colors so that every sentence end triggers a color change
+  const sentenceColors = useMemo(
+    () => computeSentenceColors(activeAnalysis.sentences),
+    [activeAnalysis.sentences]
+  );
 
   useEffect(() => {
     if (auditResult && auditResult.charCount !== text.length) {
@@ -305,7 +342,6 @@ export default function Page() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Dynamic Model Dropdown */}
             {availableModels.length > 0 && (
               <select
                 value={selectedModel}
@@ -386,7 +422,7 @@ export default function Page() {
           </div>
         )}
 
-        {/* Audit Error Alert Only (No Success Popup) */}
+        {/* Audit Error Alert Only */}
         {auditError && (
           <div className="mt-3 p-2.5 text-xs rounded border border-red-500/30 bg-red-500/10 text-red-500 flex items-center justify-between">
             <span>{auditError}</span>
@@ -438,12 +474,44 @@ export default function Page() {
 
             {/* Canvas View */}
             {view === 'draft' ? (
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Write raw draft here..."
-                className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[240px]"
-              />
+              <div className="space-y-3">
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Write raw draft here..."
+                  className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[170px]"
+                />
+
+                {/* Live Story Flow: sentence colors update immediately while typing */}
+                {activeAnalysis.sentences.length > 0 && (
+                  <div className="p-3.5 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/20 dark:bg-neutral-900/20 backdrop-blur-sm text-sm leading-relaxed">
+                    <div className="text-[10px] font-display uppercase tracking-wider text-neutral-400 mb-1.5 flex justify-between">
+                      <span>Live Story Flow</span>
+                      <button
+                        onClick={() => setView('story')}
+                        className="text-neutral-400 hover:text-white transition"
+                      >
+                        Inspect Story &rarr;
+                      </button>
+                    </div>
+                    <p className="inline leading-relaxed">
+                      {activeAnalysis.sentences.map((s, idx) => {
+                        const color = sentenceColors[idx] || { textColor: 'text-neutral-400', hex: '#9ca3af' };
+                        return (
+                          <span
+                            key={s.id || idx}
+                            className={`${color.textColor} ${
+                              s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
+                            } mr-1.5`}
+                          >
+                            {s.text}
+                          </span>
+                        );
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
                 <div
@@ -455,20 +523,23 @@ export default function Page() {
                     </p>
                   ) : (
                     <p className="inline leading-relaxed">
-                      {activeAnalysis.sentences.map((s, idx) => (
-                        <span
-                          key={s.id || idx}
-                          onClick={() => setSelectedSentenceIndex(idx)}
-                          className={`${ROLE_TEXT_COLORS[s.role]} ${
-                            s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
-                          } ${
-                            selectedSentenceIndex === idx ? 'bg-white/10 px-1 py-0.5 rounded' : ''
-                          } cursor-pointer hover:opacity-80 transition-opacity mr-1.5`}
-                          title={`Click to inspect • ${ROLE_LABELS[s.role]} • ${s.wordCount} words`}
-                        >
-                          {s.text}
-                        </span>
-                      ))}
+                      {activeAnalysis.sentences.map((s, idx) => {
+                        const color = sentenceColors[idx] || { textColor: 'text-neutral-400', hex: '#9ca3af' };
+                        return (
+                          <span
+                            key={s.id || idx}
+                            onClick={() => setSelectedSentenceIndex(idx)}
+                            className={`${color.textColor} ${
+                              s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
+                            } ${
+                              selectedSentenceIndex === idx ? 'bg-white/10 px-1 py-0.5 rounded' : ''
+                            } cursor-pointer hover:opacity-80 transition-opacity mr-1.5`}
+                            title={`Click to inspect • ${ROLE_LABELS[s.role]} • ${s.wordCount} words`}
+                          >
+                            {s.text}
+                          </span>
+                        );
+                      })}
                     </p>
                   )}
                 </div>
@@ -506,6 +577,7 @@ export default function Page() {
             {/* Visual Cadence Line Graph */}
             <CadenceLineGraph
               sentences={activeAnalysis.sentences}
+              sentenceColors={sentenceColors}
               selectedIndex={selectedSentenceIndex}
               onSelect={(idx) => setSelectedSentenceIndex(idx)}
             />
