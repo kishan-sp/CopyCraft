@@ -30,7 +30,15 @@ const ROLE_LABELS = {
   neutral: 'Narrative'
 };
 
-function CadenceLineGraph({ sentences }: { sentences: SentenceAnalysis[] }) {
+function CadenceLineGraph({
+  sentences,
+  selectedIndex,
+  onSelect
+}: {
+  sentences: SentenceAnalysis[];
+  selectedIndex: number | null;
+  onSelect: (index: number) => void;
+}) {
   if (sentences.length === 0) {
     return (
       <div className="h-20 flex items-center justify-center text-xs text-neutral-400 border border-neutral-200 dark:border-neutral-800 rounded">
@@ -84,7 +92,6 @@ function CadenceLineGraph({ sentences }: { sentences: SentenceAnalysis[] }) {
 
       <div className="relative w-full overflow-hidden">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-20 overflow-visible">
-          {/* Reference guides */}
           <line
             x1={paddingX}
             y1={paddingY}
@@ -104,7 +111,6 @@ function CadenceLineGraph({ sentences }: { sentences: SentenceAnalysis[] }) {
             className="text-neutral-200 dark:text-neutral-800"
           />
 
-          {/* Cadence Line */}
           {pathD && (
             <path
               d={pathD}
@@ -115,18 +121,22 @@ function CadenceLineGraph({ sentences }: { sentences: SentenceAnalysis[] }) {
             />
           )}
 
-          {/* Points */}
           {points.map((pt) => {
             const roleColor = ROLE_HEX_COLORS[pt.sentence.role] || '#9ca3af';
+            const isSelected = selectedIndex === pt.index;
             return (
-              <g key={pt.index} className="group cursor-pointer">
+              <g
+                key={pt.index}
+                className="cursor-pointer"
+                onClick={() => onSelect(pt.index)}
+              >
                 <circle
                   cx={pt.x}
                   cy={pt.y}
-                  r={pt.sentence.isMonotonous ? '6' : '4.5'}
+                  r={isSelected ? '7' : pt.sentence.isMonotonous ? '6' : '4.5'}
                   fill={roleColor}
-                  stroke={pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
-                  strokeWidth={pt.sentence.isMonotonous ? '2' : '0'}
+                  stroke={isSelected ? '#ffffff' : pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
+                  strokeWidth="2"
                   className="transition-transform hover:scale-125"
                 />
                 <text
@@ -160,6 +170,8 @@ export default function Page() {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [isAuditing, startAuditing] = useTransition();
   const [auditResult, setAuditResult] = useState<AnalysisResult | null>(null);
+  const [auditFeedback, setAuditFeedback] = useState<{ type: 'success' | 'notice' | 'error'; message: string } | null>(null);
+  const [selectedSentenceIndex, setSelectedSentenceIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -178,11 +190,14 @@ export default function Page() {
   useEffect(() => {
     if (auditResult && auditResult.charCount !== text.length) {
       setAuditResult(null);
+      setAuditFeedback(null);
+      setSelectedSentenceIndex(null);
     }
   }, [text, auditResult]);
 
   const handleAudit = () => {
     if (!text.trim()) return;
+    setAuditFeedback(null);
     startAuditing(async () => {
       try {
         const res = await fetch('/api/audit', {
@@ -193,9 +208,20 @@ export default function Page() {
         if (res.ok) {
           const data = await res.json();
           setAuditResult(data);
+          if (data.apiError) {
+            setAuditFeedback({ type: 'error', message: data.apiError });
+          } else if (data.source === 'groq') {
+            setAuditFeedback({ type: 'success', message: 'Audited with Groq (Llama 3.3 70B)' });
+          } else if (data.source === 'gemini') {
+            setAuditFeedback({ type: 'success', message: 'Audited with Gemini 2.0 Flash' });
+          } else {
+            setAuditFeedback({ type: 'notice', message: data.apiNotice || 'Local heuristic audit. Add Groq key for deep AI coaching.' });
+          }
+        } else {
+          setAuditFeedback({ type: 'error', message: `Server error ${res.status}` });
         }
-      } catch {
-        // Fallback remains on local
+      } catch (err: any) {
+        setAuditFeedback({ type: 'error', message: err?.message || 'Network error' });
       }
     });
   };
@@ -208,6 +234,7 @@ export default function Page() {
 
   const isOverXLimit = mode === 'x' && text.length > 280;
   const keyType = apiKey.startsWith('gsk_') ? 'Groq' : apiKey ? 'Gemini' : null;
+  const selectedSentence = selectedSentenceIndex !== null ? activeAnalysis.sentences[selectedSentenceIndex] : null;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col min-h-screen">
@@ -244,7 +271,7 @@ export default function Page() {
             disabled={isAuditing || !text.trim()}
             className="px-3 py-1.5 text-xs font-medium rounded bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 disabled:opacity-50"
           >
-            {isAuditing ? 'Auditing...' : 'Run Coach Audit'}
+            {isAuditing ? 'Auditing with AI...' : 'Run Coach Audit'}
           </button>
           <button
             onClick={handleCopy}
@@ -282,12 +309,32 @@ export default function Page() {
         </div>
       )}
 
+      {/* Audit Feedback Banner */}
+      {auditFeedback && (
+        <div
+          className={`mt-3 p-2 text-xs rounded border flex items-center justify-between ${
+            auditFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+              : auditFeedback.type === 'error'
+              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+          }`}
+        >
+          <span>{auditFeedback.message}</span>
+          <button
+            onClick={() => setAuditFeedback(null)}
+            className="opacity-70 hover:opacity-100 ml-2"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Main Split Interface */}
       <main className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 py-4">
         {/* Left Column: Canvas & Cadence Graph */}
         <section className="md:col-span-7 flex flex-col space-y-4">
           <div className="flex items-center justify-between pb-1 text-xs text-neutral-500">
-            {/* View switcher: Raw Editor vs Continuous Story Flow */}
             <div className="flex bg-neutral-100 dark:bg-neutral-900 p-0.5 rounded">
               <button
                 onClick={() => setView('draft')}
@@ -329,36 +376,68 @@ export default function Page() {
               className="w-full p-3.5 border border-neutral-200 dark:border-neutral-800 rounded bg-transparent font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[220px]"
             />
           ) : (
-            /* Continuous Inline Colored Paragraph */
-            <div
-              onClick={() => setView('draft')}
-              title="Click to edit"
-              className="w-full p-4 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50/50 dark:bg-neutral-900/40 text-sm leading-relaxed min-h-[220px] cursor-text"
-            >
-              {activeAnalysis.sentences.length === 0 ? (
-                <p className="text-neutral-400">Write text in Edit Draft to view story flow.</p>
-              ) : (
-                <p className="inline leading-relaxed">
-                  {activeAnalysis.sentences.map((s, idx) => (
-                    <span
-                      key={s.id || idx}
-                      className={`${ROLE_TEXT_COLORS[s.role]} ${
-                        s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
-                      } transition-opacity mr-1.5`}
-                      title={`${ROLE_LABELS[s.role]} • ${s.wordCount} words${
-                        s.leaks.length > 0 ? ` • Leak: ${s.leaks.join(', ')}` : ''
-                      }`}
-                    >
-                      {s.text}
+            <div className="space-y-3">
+              <div
+                className="w-full p-4 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50/50 dark:bg-neutral-900/40 text-sm leading-relaxed min-h-[160px]"
+              >
+                {activeAnalysis.sentences.length === 0 ? (
+                  <p className="text-neutral-400">Write text in Edit Draft to view story flow.</p>
+                ) : (
+                  <p className="inline leading-relaxed">
+                    {activeAnalysis.sentences.map((s, idx) => (
+                      <span
+                        key={s.id || idx}
+                        onClick={() => setSelectedSentenceIndex(idx)}
+                        className={`${ROLE_TEXT_COLORS[s.role]} ${
+                          s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
+                        } ${
+                          selectedSentenceIndex === idx ? 'bg-white/10 px-1 py-0.5 rounded' : ''
+                        } cursor-pointer hover:opacity-80 transition-opacity mr-1.5`}
+                        title={`Click to inspect • ${ROLE_LABELS[s.role]} • ${s.wordCount} words`}
+                      >
+                        {s.text}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+
+              {/* Selected Sentence Inspector & Coaching Tip */}
+              {selectedSentence && (
+                <div className="p-3 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-100/50 dark:bg-neutral-900/50 text-xs space-y-1">
+                  <div className="flex items-center justify-between text-neutral-400">
+                    <span className="font-semibold uppercase tracking-wider text-[10px]">
+                      Sentence {selectedSentenceIndex! + 1} ({ROLE_LABELS[selectedSentence.role]} • {selectedSentence.wordCount}w)
                     </span>
-                  ))}
-                </p>
+                    <button
+                      onClick={() => setSelectedSentenceIndex(null)}
+                      className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  {selectedSentence.tip ? (
+                    <p className="text-neutral-700 dark:text-neutral-300 italic">
+                      Coach Tip: {selectedSentence.tip}
+                    </p>
+                  ) : (
+                    <p className="text-neutral-500">
+                      {selectedSentence.leaks.length > 0
+                        ? `Leaks: ${selectedSentence.leaks.join(', ')}`
+                        : 'Sentence structurally sound.'}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
 
           {/* Visual Cadence Line Graph */}
-          <CadenceLineGraph sentences={activeAnalysis.sentences} />
+          <CadenceLineGraph
+            sentences={activeAnalysis.sentences}
+            selectedIndex={selectedSentenceIndex}
+            onSelect={(idx) => setSelectedSentenceIndex(idx)}
+          />
         </section>
 
         {/* Right Column: Pre-Publish Checklist & Coach Audit */}
@@ -394,8 +473,13 @@ export default function Page() {
 
           {/* Socratic Challenges */}
           <div>
-            <div className="pb-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-              Socratic Challenges
+            <div className="pb-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Socratic Challenges</span>
+              {auditResult && (
+                <span className="text-[10px] text-emerald-500 lowercase font-normal">
+                  (ai audit active)
+                </span>
+              )}
             </div>
             {activeAnalysis.coachingChallenges.length === 0 ? (
               <p className="text-xs text-neutral-500">All checks pass. Ready to ship.</p>
