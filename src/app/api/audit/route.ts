@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const text: string = body.text || '';
     const mode = body.mode || 'x';
     const clientKey: string | undefined = body.apiKey?.trim();
+    const chosenModel: string | undefined = body.model?.trim();
 
     // Groq vs Gemini detection
     const groqKey = (clientKey && clientKey.startsWith('gsk_')) ? clientKey : process.env.GROQ_API_KEY;
@@ -28,9 +29,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...localResult, source: 'local' });
     }
 
-    // 1. If Groq Key is available (fastest)
+    // 1. If Groq Key is available
     if (groqKey) {
       try {
+        const modelToUse = chosenModel || 'llama-3.1-70b-versatile';
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
             'Authorization': `Bearer ${groqKey}`
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: modelToUse,
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: `Mode: ${mode}\n\nDraft:\n${text}` }
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
         const content = groqData.choices?.[0]?.message?.content;
         if (content) {
           const parsed = JSON.parse(content);
-          return NextResponse.json(mergeResults(localResult, parsed, 'groq'));
+          return NextResponse.json(mergeResults(localResult, parsed, `groq (${modelToUse})`));
         }
       } catch (err: any) {
         return NextResponse.json({
@@ -75,8 +77,9 @@ export async function POST(req: NextRequest) {
     // 2. If Gemini Key is available
     if (geminiKey) {
       try {
+        const modelToUse = chosenModel || 'gemini-2.0-flash';
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
         const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawText) {
           const parsed = JSON.parse(rawText);
-          return NextResponse.json(mergeResults(localResult, parsed, 'gemini'));
+          return NextResponse.json(mergeResults(localResult, parsed, `gemini (${modelToUse})`));
         }
       } catch (err: any) {
         return NextResponse.json({

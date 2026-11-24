@@ -167,6 +167,9 @@ export default function Page() {
   const [mode, setMode] = useState<WritingMode>('x');
   const [view, setView] = useState<'draft' | 'story'>('draft');
   const [apiKey, setApiKey] = useState('');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [isAuditing, startAuditing] = useTransition();
   const [auditResult, setAuditResult] = useState<AnalysisResult | null>(null);
@@ -174,14 +177,55 @@ export default function Page() {
   const [selectedSentenceIndex, setSelectedSentenceIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Load API key and model from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('copycraft_api_key');
-    if (saved) setApiKey(saved);
+    const savedKey = localStorage.getItem('copycraft_api_key');
+    const savedModel = localStorage.getItem('copycraft_model');
+    if (savedKey) {
+      setApiKey(savedKey);
+      fetchModels(savedKey, savedModel || undefined);
+    }
   }, []);
 
-  const saveApiKey = (key: string) => {
+  const fetchModels = async (key: string, preserveModel?: string) => {
+    if (!key.trim()) {
+      setAvailableModels([]);
+      setSelectedModel('');
+      return;
+    }
+    setIsLoadingModels(true);
+    try {
+      const res = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const models: string[] = data.models || [];
+        setAvailableModels(models);
+        if (models.length > 0) {
+          const chosen = (preserveModel && models.includes(preserveModel)) ? preserveModel : models[0];
+          setSelectedModel(chosen);
+          localStorage.setItem('copycraft_model', chosen);
+        }
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
+  const handleApiKeyChange = (key: string) => {
     setApiKey(key);
     localStorage.setItem('copycraft_api_key', key);
+    fetchModels(key);
+  };
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    localStorage.setItem('copycraft_model', model);
   };
 
   const localAnalysis = useMemo(() => analyzeLocally(text, mode), [text, mode]);
@@ -203,17 +247,20 @@ export default function Page() {
         const res = await fetch('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, mode, apiKey: apiKey.trim() || undefined })
+          body: JSON.stringify({
+            text,
+            mode,
+            apiKey: apiKey.trim() || undefined,
+            model: selectedModel || undefined
+          })
         });
         if (res.ok) {
           const data = await res.json();
           setAuditResult(data);
           if (data.apiError) {
             setAuditFeedback({ type: 'error', message: data.apiError });
-          } else if (data.source === 'groq') {
-            setAuditFeedback({ type: 'success', message: 'Audited with Groq (Llama 3.3 70B)' });
-          } else if (data.source === 'gemini') {
-            setAuditFeedback({ type: 'success', message: 'Audited with Gemini 2.0 Flash' });
+          } else if (data.source && data.source !== 'local') {
+            setAuditFeedback({ type: 'success', message: `Audited with ${data.source}` });
           } else {
             setAuditFeedback({ type: 'notice', message: data.apiNotice || 'Local heuristic audit. Add Groq key for deep AI coaching.' });
           }
@@ -260,18 +307,33 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Active Model Selector in Header if models loaded */}
+          {availableModels.length > 0 && (
+            <select
+              value={selectedModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-700 bg-transparent rounded font-mono"
+            >
+              {availableModels.map((m) => (
+                <option key={m} value={m} className="bg-white dark:bg-neutral-900">
+                  {m}
+                </option>
+              ))}
+            </select>
+          )}
+
           <button
             onClick={() => setShowKeyInput(!showKeyInput)}
             className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200 underline"
           >
-            {keyType ? `${keyType} Key Set` : 'Paste Groq / Gemini Key'}
+            {keyType ? `${keyType} Key` : 'API Key'}
           </button>
           <button
             onClick={handleAudit}
             disabled={isAuditing || !text.trim()}
             className="px-3 py-1.5 text-xs font-medium rounded bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 disabled:opacity-50"
           >
-            {isAuditing ? 'Auditing with AI...' : 'Run Coach Audit'}
+            {isAuditing ? 'Auditing...' : 'Run Coach Audit'}
           </button>
           <button
             onClick={handleCopy}
@@ -282,24 +344,41 @@ export default function Page() {
         </div>
       </header>
 
-      {/* Groq / Gemini API Key Input */}
+      {/* Groq / Gemini API Key & Model Configuration */}
       {showKeyInput && (
-        <div className="py-2.5 px-3 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-xs bg-neutral-50 dark:bg-neutral-900/50">
-          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
-            <span className="text-neutral-500">API Key:</span>
-            <input
-              type="password"
-              placeholder="Paste Groq key (gsk_...) or Gemini key"
-              value={apiKey}
-              onChange={(e) => saveApiKey(e.target.value)}
-              className="flex-1 max-w-md px-2 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded font-mono text-xs"
-            />
-            {keyType && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200 dark:bg-neutral-800 font-medium">
-                Detected: {keyType}
-              </span>
-            )}
+        <div className="py-2.5 px-3 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-3 text-xs bg-neutral-50 dark:bg-neutral-900/50">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-500">API Key:</span>
+              <input
+                type="password"
+                placeholder="Paste Groq (gsk_...) or Gemini key"
+                value={apiKey}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                className="w-64 px-2 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded font-mono text-xs"
+              />
+            </div>
+
+            {isLoadingModels ? (
+              <span className="text-neutral-400 italic">Fetching models from provider...</span>
+            ) : availableModels.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-neutral-500">Model:</span>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  className="px-2 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded font-mono text-xs max-w-xs"
+                >
+                  {availableModels.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
+
           <button
             onClick={() => setShowKeyInput(false)}
             className="px-2 py-1 rounded bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700"
@@ -402,7 +481,7 @@ export default function Page() {
                 )}
               </div>
 
-              {/* Selected Sentence Inspector & Coaching Tip */}
+              {/* Selected Sentence Inspector */}
               {selectedSentence && (
                 <div className="p-3 rounded border border-neutral-200 dark:border-neutral-800 bg-neutral-100/50 dark:bg-neutral-900/50 text-xs space-y-1">
                   <div className="flex items-center justify-between text-neutral-400">
