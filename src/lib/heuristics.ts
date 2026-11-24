@@ -18,11 +18,25 @@ const OUTCOME_REGEX = /\b(save|saving|make|making|cut|cutting|reduce|reducing|bo
 
 export function splitIntoSentences(text: string): string[] {
   if (!text || !text.trim()) return [];
-  const matches = text.match(/[^.!?\n]+([.!?]+|\n+|$)/g);
-  if (!matches) return [text];
-  return matches
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+
+  // Protect decimals (e.g. 1.8GB, 94.2%) and abbreviations (e.g. e.g., i.e., vs., Dr.)
+  // Split on [.!?] only when:
+  // 1. Not preceded by a digit and dot (e.g. 1. or 94.)
+  // 2. Not preceded by common abbreviations
+  // 3. Followed by whitespace and capital letter, quote, or end of text
+  const sentenceEndRegex = /(?<=[.!?])(?<!\d\.)(?<!\b(?:e\.g|i\.e|vs|mr|mrs|dr|prof)\.)\s+(?=[A-Z0-9"'\n]|$)/gi;
+
+  const paragraphs = text.split(/\n+/);
+  const result: string[] = [];
+
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+    const sentences = trimmed.split(sentenceEndRegex).map(s => s.trim()).filter(Boolean);
+    result.push(...sentences);
+  }
+
+  return result.length > 0 ? result : [text.trim()];
 }
 
 export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisResult {
@@ -102,7 +116,7 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
 
   const challenges: string[] = [];
   if (isBlank) {
-    challenges.push("Write or paste a draft to begin Socratic evaluation.");
+    challenges.push("Write or paste a draft to begin real-time evaluation.");
   } else {
     if (!hasTensionOverall) {
       challenges.push("Your story is purely linear (and then... and then...). Insert a 'But' or conflict beat to create tension.");
@@ -121,7 +135,6 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
     }
   }
 
-  // Pre-publish checklist: strictly false when blank
   const checklist: PrePublishChecklist = {
     strongHook: !isBlank && analyzedSentences.length > 0 && analyzedSentences[0].wordCount <= 25,
     clearOutcome: !isBlank && (hasOutcomeOverall || (mode === 'pitch' && totalWords > 10)),

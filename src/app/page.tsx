@@ -1,28 +1,25 @@
 'use client';
 
 import { useState, useMemo, useEffect, useTransition } from 'react';
-import { WritingMode, AnalysisResult } from '@/lib/types';
+import { WritingMode, AnalysisResult, SentenceAnalysis } from '@/lib/types';
 import { analyzeLocally } from '@/lib/heuristics';
 
-const SAMPLE_TEXT = `Everyone thinks training larger models is the only path to better AI accuracy.
-They are wrong because scaling parameters hits severe memory bottlenecks on edge devices.
-Instead, we compressed a 7B model down to 1.8GB using 4-bit quantization, maintaining 94.2% benchmark accuracy across 100K images.
-This cuts deployment latency by 60% and saves $12K monthly in cloud compute costs.`;
+const SAMPLE_TEXT = `Everyone thinks training larger models is the only path to better AI accuracy. They are wrong because scaling parameters hits severe memory bottlenecks on edge devices. Instead, we compressed a 7B model down to 1.8GB using 4-bit quantization, maintaining 94.2% benchmark accuracy across 100K images. This cuts deployment latency by 60% and saves $12K monthly in cloud compute costs.`;
 
-const ROLE_STYLES = {
-  hook: 'border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20 text-blue-950 dark:text-blue-100 p-2.5 rounded-r',
-  tension: 'border-l-4 border-amber-500 bg-amber-500/10 dark:bg-amber-500/20 text-amber-950 dark:text-amber-100 p-2.5 rounded-r',
-  resolution: 'border-l-4 border-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-950 dark:text-emerald-100 p-2.5 rounded-r',
-  proof: 'border-l-4 border-purple-500 bg-purple-500/10 dark:bg-purple-500/20 text-purple-950 dark:text-purple-100 p-2.5 rounded-r',
-  neutral: 'border-l-4 border-neutral-300 dark:border-neutral-700 bg-neutral-100/40 dark:bg-neutral-800/40 p-2.5 rounded-r'
+const ROLE_TEXT_COLORS = {
+  hook: 'text-rose-400 dark:text-rose-400',
+  tension: 'text-orange-400 dark:text-orange-400',
+  resolution: 'text-amber-300 dark:text-amber-300',
+  proof: 'text-purple-400 dark:text-purple-400',
+  neutral: 'text-neutral-400 dark:text-neutral-300'
 };
 
-const ROLE_PILL_STYLES = {
-  hook: 'bg-blue-500 text-white',
-  tension: 'bg-amber-500 text-white',
-  resolution: 'bg-emerald-500 text-white',
-  proof: 'bg-purple-500 text-white',
-  neutral: 'bg-neutral-400 text-white'
+const ROLE_HEX_COLORS: Record<string, string> = {
+  hook: '#fb7185',
+  tension: '#fb923c',
+  resolution: '#facc15',
+  proof: '#c084fc',
+  neutral: '#9ca3af'
 };
 
 const ROLE_LABELS = {
@@ -33,17 +30,138 @@ const ROLE_LABELS = {
   neutral: 'Narrative'
 };
 
+function CadenceLineGraph({ sentences }: { sentences: SentenceAnalysis[] }) {
+  if (sentences.length === 0) {
+    return (
+      <div className="h-20 flex items-center justify-center text-xs text-neutral-400 border border-neutral-200 dark:border-neutral-800 rounded">
+        Cadence graph will plot sentence rhythm as you type
+      </div>
+    );
+  }
+
+  const wordCounts = sentences.map((s) => s.wordCount);
+  const maxWords = Math.max(...wordCounts, 10);
+  const minWords = Math.max(0, Math.min(...wordCounts) - 2);
+  const range = maxWords - minWords || 1;
+
+  const width = 500;
+  const height = 90;
+  const paddingX = 35;
+  const paddingY = 16;
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingY * 2;
+
+  const points = sentences.map((s, i) => {
+    const x =
+      sentences.length === 1
+        ? width / 2
+        : paddingX + (i / (sentences.length - 1)) * chartWidth;
+    const y =
+      height - paddingY - ((s.wordCount - minWords) / range) * chartHeight;
+    return { x, y, sentence: s, index: i };
+  });
+
+  const pathD =
+    points.length === 1
+      ? ''
+      : points.reduce(
+          (acc, pt, i) =>
+            `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`,
+          ''
+        );
+
+  return (
+    <div className="p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50/50 dark:bg-neutral-900/40 space-y-2">
+      <div className="flex items-center justify-between text-xs text-neutral-400">
+        <span className="font-semibold uppercase tracking-wider text-[10px]">
+          Cadence Rhythm Graph
+        </span>
+        <span>
+          Avg: {Math.round(wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length)}w • 
+          Range: {Math.min(...wordCounts)}–{Math.max(...wordCounts)}w
+        </span>
+      </div>
+
+      <div className="relative w-full overflow-hidden">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-20 overflow-visible">
+          {/* Reference guides */}
+          <line
+            x1={paddingX}
+            y1={paddingY}
+            x2={width - paddingX}
+            y2={paddingY}
+            stroke="currentColor"
+            strokeDasharray="2 3"
+            className="text-neutral-200 dark:text-neutral-800"
+          />
+          <line
+            x1={paddingX}
+            y1={height - paddingY}
+            x2={width - paddingX}
+            y2={height - paddingY}
+            stroke="currentColor"
+            strokeDasharray="2 3"
+            className="text-neutral-200 dark:text-neutral-800"
+          />
+
+          {/* Cadence Line */}
+          {pathD && (
+            <path
+              d={pathD}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-neutral-400 dark:text-neutral-600"
+            />
+          )}
+
+          {/* Points */}
+          {points.map((pt) => {
+            const roleColor = ROLE_HEX_COLORS[pt.sentence.role] || '#9ca3af';
+            return (
+              <g key={pt.index} className="group cursor-pointer">
+                <circle
+                  cx={pt.x}
+                  cy={pt.y}
+                  r={pt.sentence.isMonotonous ? '6' : '4.5'}
+                  fill={roleColor}
+                  stroke={pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
+                  strokeWidth={pt.sentence.isMonotonous ? '2' : '0'}
+                  className="transition-transform hover:scale-125"
+                />
+                <text
+                  x={pt.x}
+                  y={pt.y - 8}
+                  textAnchor="middle"
+                  className="text-[9px] fill-neutral-500 font-mono"
+                >
+                  {pt.sentence.wordCount}w
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {sentences.some((s) => s.isMonotonous) && (
+        <p className="text-[11px] text-amber-500">
+          Monotony warning: flat cadence detected on identical sentence lengths.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Page() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [mode, setMode] = useState<WritingMode>('x');
-  const [view, setView] = useState<'draft' | 'lens'>('draft');
+  const [view, setView] = useState<'draft' | 'story'>('draft');
   const [apiKey, setApiKey] = useState('');
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [isAuditing, startAuditing] = useTransition();
   const [auditResult, setAuditResult] = useState<AnalysisResult | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load API key from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('copycraft_api_key');
     if (saved) setApiKey(saved);
@@ -54,7 +172,6 @@ export default function Page() {
     localStorage.setItem('copycraft_api_key', key);
   };
 
-  // Instant local deterministic analysis on every keystroke
   const localAnalysis = useMemo(() => analyzeLocally(text, mode), [text, mode]);
   const activeAnalysis = auditResult || localAnalysis;
 
@@ -167,10 +284,10 @@ export default function Page() {
 
       {/* Main Split Interface */}
       <main className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 py-4">
-        {/* Left Column: Canvas */}
-        <section className="md:col-span-7 flex flex-col">
-          <div className="flex items-center justify-between pb-2 text-xs text-neutral-500">
-            {/* Prominent Tab Switcher */}
+        {/* Left Column: Canvas & Cadence Graph */}
+        <section className="md:col-span-7 flex flex-col space-y-4">
+          <div className="flex items-center justify-between pb-1 text-xs text-neutral-500">
+            {/* View switcher: Raw Editor vs Continuous Story Flow */}
             <div className="flex bg-neutral-100 dark:bg-neutral-900 p-0.5 rounded">
               <button
                 onClick={() => setView('draft')}
@@ -180,17 +297,17 @@ export default function Page() {
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
                 }`}
               >
-                Draft Editor
+                Edit Draft
               </button>
               <button
-                onClick={() => setView('lens')}
+                onClick={() => setView('story')}
                 className={`px-3 py-1 rounded transition text-xs flex items-center gap-1.5 ${
-                  view === 'lens'
+                  view === 'story'
                     ? 'bg-white dark:bg-neutral-800 font-medium shadow-sm text-neutral-900 dark:text-neutral-100'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
                 }`}
               >
-                <span>Story Lens</span>
+                <span>Story Flow</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               </button>
             </div>
@@ -203,71 +320,45 @@ export default function Page() {
             </div>
           </div>
 
+          {/* Canvas View */}
           {view === 'draft' ? (
-            <div className="flex-1 flex flex-col space-y-2">
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Write raw draft here..."
-                className="flex-1 w-full p-3 border border-neutral-200 dark:border-neutral-800 rounded bg-transparent font-mono text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[340px]"
-              />
-
-              {/* Real-time Sentence Cadence Strip under Editor */}
-              {activeAnalysis.sentences.length > 0 && (
-                <div className="p-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50/50 dark:bg-neutral-900/30">
-                  <div className="text-[11px] text-neutral-400 mb-1 flex justify-between">
-                    <span>Live Cadence Rhythm</span>
-                    <button
-                      onClick={() => setView('lens')}
-                      className="text-neutral-600 dark:text-neutral-300 hover:underline"
-                    >
-                      View Highlighted Lens &rarr;
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {activeAnalysis.sentences.map((s, idx) => (
-                      <span
-                        key={idx}
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${ROLE_PILL_STYLES[s.role]}`}
-                        title={`${ROLE_LABELS[s.role]}: ${s.wordCount} words`}
-                      >
-                        S{idx + 1}: {s.wordCount}w
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Write raw draft here..."
+              className="w-full p-3.5 border border-neutral-200 dark:border-neutral-800 rounded bg-transparent font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[220px]"
+            />
           ) : (
-            <div className="flex-1 p-3 border border-neutral-200 dark:border-neutral-800 rounded space-y-2.5 overflow-y-auto min-h-[380px]">
+            /* Continuous Inline Colored Paragraph */
+            <div
+              onClick={() => setView('draft')}
+              title="Click to edit"
+              className="w-full p-4 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50/50 dark:bg-neutral-900/40 text-sm leading-relaxed min-h-[220px] cursor-text"
+            >
               {activeAnalysis.sentences.length === 0 ? (
-                <p className="text-neutral-400 text-sm">Write or paste text in the Draft Editor to view highlighted sentences.</p>
+                <p className="text-neutral-400">Write text in Edit Draft to view story flow.</p>
               ) : (
-                activeAnalysis.sentences.map((s, idx) => (
-                  <div key={s.id || idx} className={`${ROLE_STYLES[s.role]} space-y-1`}>
-                    <div className="flex items-center justify-between text-[11px] font-semibold opacity-80">
-                      <span>{ROLE_LABELS[s.role]}</span>
-                      <span>{s.wordCount} words</span>
-                    </div>
-                    <p className="text-sm leading-relaxed font-sans">
+                <p className="inline leading-relaxed">
+                  {activeAnalysis.sentences.map((s, idx) => (
+                    <span
+                      key={s.id || idx}
+                      className={`${ROLE_TEXT_COLORS[s.role]} ${
+                        s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
+                      } transition-opacity mr-1.5`}
+                      title={`${ROLE_LABELS[s.role]} • ${s.wordCount} words${
+                        s.leaks.length > 0 ? ` • Leak: ${s.leaks.join(', ')}` : ''
+                      }`}
+                    >
                       {s.text}
-                    </p>
-                    {s.isMonotonous && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Monotonous length: matches adjacent sentence lengths.</p>
-                    )}
-                    {s.leaks.length > 0 && (
-                      <div className="text-xs text-red-600 dark:text-red-400 font-medium">
-                        Leak: {s.leaks.join(', ')}
-                      </div>
-                    )}
-                    {s.tip && (
-                      <p className="text-xs opacity-75 italic">{s.tip}</p>
-                    )}
-                  </div>
-                ))
+                    </span>
+                  ))}
+                </p>
               )}
             </div>
           )}
+
+          {/* Visual Cadence Line Graph */}
+          <CadenceLineGraph sentences={activeAnalysis.sentences} />
         </section>
 
         {/* Right Column: Pre-Publish Checklist & Coach Audit */}
