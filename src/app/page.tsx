@@ -157,23 +157,30 @@ function CadenceLineGraph({
             return (
               <g
                 key={pt.index}
-                className="cursor-pointer"
+                className="cursor-pointer group"
                 onClick={() => onSelect(pt.index)}
               >
+                {/* Fixed invisible hit-area prevents mouse-leave jitter */}
+                <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" />
+
                 <circle
                   cx={pt.x}
                   cy={pt.y}
-                  r={isSelected ? '6.5' : pt.sentence.isMonotonous ? '5.5' : '4'}
+                  r={isSelected ? 6.5 : pt.sentence.isMonotonous ? 5.5 : 4}
                   fill={ptColor}
                   stroke={isSelected ? '#ffffff' : pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
                   strokeWidth="2"
-                  className="transition-transform hover:scale-125"
+                  style={{
+                    transformOrigin: `${pt.x}px ${pt.y}px`,
+                    transition: 'transform 0.15s ease'
+                  }}
+                  className="group-hover:scale-125"
                 />
                 <text
                   x={pt.x}
                   y={pt.y - 8}
                   textAnchor="middle"
-                  className="text-[9px] fill-neutral-400 font-mono"
+                  className="text-[9px] fill-neutral-400 font-mono pointer-events-none select-none"
                 >
                   {pt.sentence.wordCount}w
                 </text>
