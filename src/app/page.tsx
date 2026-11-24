@@ -260,7 +260,6 @@ export default function Page() {
   const localAnalysis = useMemo(() => analyzeLocally(text, mode), [text, mode]);
   const activeAnalysis = auditResult || localAnalysis;
   
-  // Calculate distinct alternating colors so that every sentence end triggers a color change
   const sentenceColors = useMemo(
     () => computeSentenceColors(activeAnalysis.sentences),
     [activeAnalysis.sentences]
@@ -474,48 +473,18 @@ export default function Page() {
 
             {/* Canvas View */}
             {view === 'draft' ? (
-              <div className="space-y-3">
-                <textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Write raw draft here..."
-                  className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[170px]"
-                />
-
-                {/* Live Story Flow: sentence colors update immediately while typing */}
-                {activeAnalysis.sentences.length > 0 && (
-                  <div className="p-3.5 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/20 dark:bg-neutral-900/20 backdrop-blur-sm text-sm leading-relaxed">
-                    <div className="text-[10px] font-display uppercase tracking-wider text-neutral-400 mb-1.5 flex justify-between">
-                      <span>Live Story Flow</span>
-                      <button
-                        onClick={() => setView('story')}
-                        className="text-neutral-400 hover:text-white transition"
-                      >
-                        Inspect Story &rarr;
-                      </button>
-                    </div>
-                    <p className="inline leading-relaxed">
-                      {activeAnalysis.sentences.map((s, idx) => {
-                        const color = sentenceColors[idx] || { textColor: 'text-neutral-400', hex: '#9ca3af' };
-                        return (
-                          <span
-                            key={s.id || idx}
-                            className={`${color.textColor} ${
-                              s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
-                            } mr-1.5`}
-                          >
-                            {s.text}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  </div>
-                )}
-              </div>
+              /* Single Raw Input in Edit Draft */
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Write raw draft here..."
+                className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[260px]"
+              />
             ) : (
+              /* Continuous Colored Text in Story Flow Only */
               <div className="space-y-3">
                 <div
-                  className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm text-sm leading-relaxed min-h-[180px]"
+                  className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm text-sm leading-relaxed min-h-[200px]"
                 >
                   {activeAnalysis.sentences.length === 0 ? (
                     <p className="text-neutral-500 font-display uppercase tracking-wider">
