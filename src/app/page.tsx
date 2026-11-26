@@ -8,8 +8,6 @@ type ThemeMode = 'dark' | 'light' | 'system';
 type EditorFont = 'sans' | 'serif' | 'mono';
 type FontSize = 'sm' | 'md' | 'lg';
 
-const SAMPLE_TEXT = `Everyone thinks training larger models is the only path to better AI accuracy. They are wrong because scaling parameters hits severe memory bottlenecks on edge devices. Instead, we compressed a 7B model down to 1.8GB using 4-bit quantization, maintaining 94.2% benchmark accuracy across 100K images. This cuts deployment latency by 60% and saves $12K monthly in cloud compute costs.`;
-
 const NARRATIVE_CYCLE_COLORS = [
   { textColor: 'text-rose-600 dark:text-rose-400', hex: '#fb7185' },
   { textColor: 'text-orange-600 dark:text-orange-400', hex: '#fb923c' },
@@ -213,7 +211,7 @@ function CadenceLineGraph({
 }
 
 export default function Page() {
-  const [text, setText] = useState(SAMPLE_TEXT);
+  const [text, setText] = useState('');
   const [mode, setMode] = useState<WritingMode>('x');
   const [view, setView] = useState<'draft' | 'story'>('draft');
   const [theme, setTheme] = useState<ThemeMode>('dark');
