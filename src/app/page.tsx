@@ -4,22 +4,26 @@ import { useState, useMemo, useEffect, useTransition } from 'react';
 import { WritingMode, AnalysisResult, SentenceAnalysis, SentenceRole } from '@/lib/types';
 import { analyzeLocally } from '@/lib/heuristics';
 
+type ThemeMode = 'dark' | 'light' | 'system';
+type EditorFont = 'sans' | 'serif' | 'mono';
+type FontSize = 'sm' | 'md' | 'lg';
+
 const SAMPLE_TEXT = `Everyone thinks training larger models is the only path to better AI accuracy. They are wrong because scaling parameters hits severe memory bottlenecks on edge devices. Instead, we compressed a 7B model down to 1.8GB using 4-bit quantization, maintaining 94.2% benchmark accuracy across 100K images. This cuts deployment latency by 60% and saves $12K monthly in cloud compute costs.`;
 
 const NARRATIVE_CYCLE_COLORS = [
-  { textColor: 'text-rose-400 dark:text-rose-400', hex: '#fb7185' },
-  { textColor: 'text-orange-400 dark:text-orange-400', hex: '#fb923c' },
-  { textColor: 'text-amber-300 dark:text-amber-300', hex: '#facc15' },
-  { textColor: 'text-emerald-400 dark:text-emerald-400', hex: '#34d399' },
-  { textColor: 'text-purple-400 dark:text-purple-400', hex: '#c084fc' },
-  { textColor: 'text-sky-400 dark:text-sky-400', hex: '#38bdf8' }
+  { textColor: 'text-rose-600 dark:text-rose-400', hex: '#fb7185' },
+  { textColor: 'text-orange-600 dark:text-orange-400', hex: '#fb923c' },
+  { textColor: 'text-amber-600 dark:text-amber-300', hex: '#facc15' },
+  { textColor: 'text-emerald-600 dark:text-emerald-400', hex: '#34d399' },
+  { textColor: 'text-purple-600 dark:text-purple-400', hex: '#c084fc' },
+  { textColor: 'text-sky-600 dark:text-sky-400', hex: '#38bdf8' }
 ];
 
 const ROLE_BASE_COLOR_INDEX: Record<SentenceRole, number> = {
-  hook: 0,       // Rose
-  tension: 1,    // Orange
-  resolution: 2, // Amber
-  proof: 4,      // Purple
+  hook: 0,
+  tension: 1,
+  resolution: 2,
+  proof: 4,
   neutral: -1
 };
 
@@ -31,7 +35,18 @@ const ROLE_LABELS = {
   neutral: 'Narrative'
 };
 
-// Guarantees that every sentence end triggers an immediate color change
+const FONT_CLASS: Record<EditorFont, string> = {
+  sans: 'font-sans',
+  serif: 'font-serif',
+  mono: 'font-mono'
+};
+
+const SIZE_CLASS: Record<FontSize, string> = {
+  sm: 'text-xs',
+  md: 'text-sm',
+  lg: 'text-base'
+};
+
 function computeSentenceColors(sentences: SentenceAnalysis[]) {
   const result: { textColor: string; hex: string }[] = [];
 
@@ -72,8 +87,8 @@ function CadenceLineGraph({
 }) {
   if (sentences.length === 0) {
     return (
-      <div className="h-20 flex items-center justify-center font-display uppercase tracking-wider text-xs text-neutral-500 border border-neutral-200 dark:border-neutral-800 rounded">
-        Cadence graph will plot sentence rhythm as you type
+      <div className="h-20 flex items-center justify-center font-display uppercase tracking-wider text-xs text-[var(--fg-muted)] border border-[var(--border)] bg-[var(--card)] rounded">
+        Cadence graph plots as you type
       </div>
     );
   }
@@ -110,13 +125,13 @@ function CadenceLineGraph({
         );
 
   return (
-    <div className="p-3.5 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/40 dark:bg-neutral-900/40 backdrop-blur-sm space-y-2">
-      <div className="flex items-center justify-between text-xs text-neutral-400">
-        <span className="font-display uppercase tracking-wider text-sm text-neutral-300">
+    <div className="p-4 border border-[var(--border)] rounded bg-[var(--card)] space-y-2">
+      <div className="flex items-center justify-between text-xs text-[var(--fg-muted)] border-b border-[var(--border)] pb-2">
+        <span className="font-display uppercase tracking-wider text-lg text-[var(--fg)]">
           Cadence Rhythm
         </span>
         <span className="font-display uppercase tracking-wider text-xs">
-          Avg: {Math.round(wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length)}w • Range: {Math.min(...wordCounts)}–{Math.max(...wordCounts)}w
+          Avg {Math.round(wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length)}w • {Math.min(...wordCounts)}–{Math.max(...wordCounts)}w
         </span>
       </div>
 
@@ -129,7 +144,7 @@ function CadenceLineGraph({
             y2={paddingY}
             stroke="currentColor"
             strokeDasharray="2 3"
-            className="text-neutral-200 dark:text-neutral-800"
+            className="text-neutral-300 dark:text-neutral-800"
           />
           <line
             x1={paddingX}
@@ -138,7 +153,7 @@ function CadenceLineGraph({
             y2={height - paddingY}
             stroke="currentColor"
             strokeDasharray="2 3"
-            className="text-neutral-200 dark:text-neutral-800"
+            className="text-neutral-300 dark:text-neutral-800"
           />
 
           {pathD && (
@@ -160,15 +175,13 @@ function CadenceLineGraph({
                 className="cursor-pointer group"
                 onClick={() => onSelect(pt.index)}
               >
-                {/* Fixed invisible hit-area prevents mouse-leave jitter */}
                 <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" />
-
                 <circle
                   cx={pt.x}
                   cy={pt.y}
                   r={isSelected ? 6.5 : pt.sentence.isMonotonous ? 5.5 : 4}
                   fill={ptColor}
-                  stroke={isSelected ? '#ffffff' : pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
+                  stroke={isSelected ? 'var(--fg)' : pt.sentence.isMonotonous ? '#ef4444' : 'transparent'}
                   strokeWidth="2"
                   style={{
                     transformOrigin: `${pt.x}px ${pt.y}px`,
@@ -180,7 +193,7 @@ function CadenceLineGraph({
                   x={pt.x}
                   y={pt.y - 8}
                   textAnchor="middle"
-                  className="text-[9px] fill-neutral-400 font-mono pointer-events-none select-none"
+                  className="text-[9px] fill-neutral-500 dark:fill-neutral-400 font-mono pointer-events-none select-none"
                 >
                   {pt.sentence.wordCount}w
                 </text>
@@ -203,25 +216,82 @@ export default function Page() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [mode, setMode] = useState<WritingMode>('x');
   const [view, setView] = useState<'draft' | 'story'>('draft');
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [editorFont, setEditorFont] = useState<EditorFont>('sans');
+  const [fontSize, setFontSize] = useState<FontSize>('md');
+  const [showGrid, setShowGrid] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [showKeyInput, setShowKeyInput] = useState(false);
   const [isAuditing, startAuditing] = useTransition();
   const [auditResult, setAuditResult] = useState<AnalysisResult | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [selectedSentenceIndex, setSelectedSentenceIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [soWhatChain, setSoWhatChain] = useState<string[] | null>(null);
+  const [isDrilling, startDrilling] = useTransition();
 
   useEffect(() => {
     const savedKey = localStorage.getItem('copycraft_api_key');
     const savedModel = localStorage.getItem('copycraft_model');
+    const savedTheme = localStorage.getItem('copycraft_theme') as ThemeMode | null;
+    const savedFont = localStorage.getItem('copycraft_font') as EditorFont | null;
+    const savedSize = localStorage.getItem('copycraft_font_size') as FontSize | null;
+    const savedGrid = localStorage.getItem('copycraft_grid');
+
+    if (savedTheme) setTheme(savedTheme);
+    if (savedFont) setEditorFont(savedFont);
+    if (savedSize) setFontSize(savedSize);
+    if (savedGrid !== null) setShowGrid(savedGrid === 'true');
     if (savedKey) {
       setApiKey(savedKey);
       fetchModels(savedKey, savedModel || undefined);
     }
+
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = (isDark: boolean) => {
+      root.classList.toggle('dark', isDark);
+    };
+    if (theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      apply(mq.matches);
+      const onChange = (e: MediaQueryListEvent) => apply(e.matches);
+      mq.addEventListener?.('change', onChange);
+      return () => mq.removeEventListener?.('change', onChange);
+    }
+    apply(theme === 'dark');
+  }, [theme]);
+
+  const updateTheme = (t: ThemeMode) => {
+    setTheme(t);
+    localStorage.setItem('copycraft_theme', t);
+  };
+
+  const updateFont = (f: EditorFont) => {
+    setEditorFont(f);
+    localStorage.setItem('copycraft_font', f);
+  };
+
+  const updateFontSize = (s: FontSize) => {
+    setFontSize(s);
+    localStorage.setItem('copycraft_font_size', s);
+  };
+
+  const toggleGrid = () => {
+    const next = !showGrid;
+    setShowGrid(next);
+    localStorage.setItem('copycraft_grid', String(next));
+  };
 
   const fetchModels = async (key: string, preserveModel?: string) => {
     if (!key.trim()) {
@@ -241,7 +311,7 @@ export default function Page() {
         const models: string[] = data.models || [];
         setAvailableModels(models);
         if (models.length > 0) {
-          const chosen = (preserveModel && models.includes(preserveModel)) ? preserveModel : models[0];
+          const chosen = preserveModel && models.includes(preserveModel) ? preserveModel : models[0];
           setSelectedModel(chosen);
           localStorage.setItem('copycraft_model', chosen);
         }
@@ -266,7 +336,7 @@ export default function Page() {
 
   const localAnalysis = useMemo(() => analyzeLocally(text, mode), [text, mode]);
   const activeAnalysis = auditResult || localAnalysis;
-  
+
   const sentenceColors = useMemo(
     () => computeSentenceColors(activeAnalysis.sentences),
     [activeAnalysis.sentences]
@@ -278,7 +348,54 @@ export default function Page() {
       setAuditError(null);
       setSelectedSentenceIndex(null);
     }
+    setSoWhatChain(null);
   }, [text, auditResult]);
+
+  const handleSoWhatDrill = () => {
+    if (!text.trim()) return;
+    setAuditError(null);
+    startDrilling(async () => {
+      try {
+        const res = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            mode,
+            action: 'so_what',
+            apiKey: apiKey.trim() || undefined,
+            model: selectedModel || undefined
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.apiError) {
+            setAuditError(data.apiError);
+          } else if (data.soWhatChain) {
+            setSoWhatChain(data.soWhatChain);
+          }
+        }
+      } catch (err: any) {
+        setAuditError(err?.message || 'Network error during drill');
+      }
+    });
+  };
+
+  const handleListen = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleAudit = () => {
     if (!text.trim()) return;
@@ -301,6 +418,7 @@ export default function Page() {
             setAuditError(data.apiError);
           } else {
             setAuditResult(data);
+            if (data.soWhatChain) setSoWhatChain(data.soWhatChain);
           }
         } else {
           setAuditError(`Audit request failed (${res.status})`);
@@ -318,27 +436,27 @@ export default function Page() {
   };
 
   const isOverXLimit = mode === 'x' && text.length > 280;
-  const keyType = apiKey.startsWith('gsk_') ? 'Groq' : apiKey ? 'Gemini' : null;
   const selectedSentence = selectedSentenceIndex !== null ? activeAnalysis.sentences[selectedSentenceIndex] : null;
+  const editorTypography = `${FONT_CLASS[editorFont]} ${SIZE_CLASS[fontSize]}`;
 
   return (
-    <div className="min-h-screen bg-grid-subtle">
-      <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col min-h-screen">
+    <div className={`min-h-screen lg:h-screen lg:overflow-hidden bg-[var(--bg)] text-[var(--fg)] ${showGrid ? 'bg-grid-subtle' : ''}`}>
+      <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col min-h-screen lg:h-full">
         {/* Header */}
-        <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-neutral-200 dark:border-neutral-800">
+        <header className="shrink-0 flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-6">
-            <span className="font-display text-2xl tracking-wider uppercase text-neutral-900 dark:text-neutral-100">
+            <span className="font-display text-2xl tracking-wider uppercase text-[var(--fg)]">
               CopyCraft
             </span>
-            <nav className="flex gap-1 bg-neutral-100 dark:bg-neutral-900/80 p-0.5 rounded border border-neutral-200 dark:border-neutral-800">
+            <nav className="flex gap-1 bg-[var(--muted)] p-0.5 rounded border border-[var(--border)]">
               {(['x', 'blog', 'pitch'] as WritingMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
                   className={`px-3 py-1 rounded font-display text-xs uppercase tracking-wider transition ${
                     mode === m
-                      ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
+                      ? 'bg-[var(--tab-active)] text-[var(--tab-active-fg)] shadow-sm'
+                      : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
                   }`}
                 >
                   {m === 'x' ? 'X Post' : m === 'blog' ? 'Blog' : 'Pitch'}
@@ -348,89 +466,36 @@ export default function Page() {
           </div>
 
           <div className="flex items-center gap-2">
-            {availableModels.length > 0 && (
-              <select
-                value={selectedModel}
-                onChange={(e) => handleModelChange(e.target.value)}
-                className="px-2.5 py-1 text-xs border border-neutral-300 dark:border-neutral-700 bg-transparent rounded font-mono text-neutral-700 dark:text-neutral-300 focus:outline-none"
-              >
-                {availableModels.map((m) => (
-                  <option key={m} value={m} className="bg-white dark:bg-neutral-900">
-                    {m}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <button
-              onClick={() => setShowKeyInput(!showKeyInput)}
-              className="font-display tracking-wider uppercase text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200 underline px-2 py-1"
-            >
-              {keyType ? `${keyType} Key` : 'API Key'}
-            </button>
             <button
               onClick={handleAudit}
               disabled={isAuditing || !text.trim()}
-              className="px-4 py-1.5 font-display text-xs tracking-wider uppercase rounded bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 hover:opacity-90 transition disabled:opacity-50"
+              className="px-4 py-1.5 font-display text-xs tracking-wider uppercase rounded bg-[var(--accent-bg)] text-[var(--accent-fg)] hover:opacity-90 transition disabled:opacity-50"
             >
               {isAuditing ? 'Auditing...' : 'Run Coach Audit'}
             </button>
             <button
+              onClick={handleListen}
+              disabled={!text.trim()}
+              className={`px-3.5 py-1.5 font-display text-xs tracking-wider uppercase border rounded transition disabled:opacity-50 ${
+                isSpeaking
+                  ? 'border-emerald-500 text-emerald-500'
+                  : 'border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:opacity-80'
+              }`}
+            >
+              {isSpeaking ? 'Stop' : 'Listen'}
+            </button>
+            <button
               onClick={handleCopy}
-              className="px-3.5 py-1.5 font-display text-xs tracking-wider uppercase border border-neutral-300 dark:border-neutral-800 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 transition"
+              className="px-3.5 py-1.5 font-display text-xs tracking-wider uppercase border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] rounded hover:opacity-80 transition"
             >
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
         </header>
 
-        {/* API Key & Dynamic Models Drawer */}
-        {showKeyInput && (
-          <div className="py-3 px-3.5 mt-2 border border-neutral-200 dark:border-neutral-800 rounded flex flex-wrap items-center justify-between gap-3 text-xs bg-white/60 dark:bg-neutral-900/60 backdrop-blur-sm">
-            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-              <div className="flex items-center gap-2">
-                <span className="font-display uppercase tracking-wider text-neutral-500">API Key:</span>
-                <input
-                  type="password"
-                  placeholder="Paste Groq (gsk_...) or Gemini key"
-                  value={apiKey}
-                  onChange={(e) => handleApiKeyChange(e.target.value)}
-                  className="w-64 px-2.5 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950 rounded font-mono text-xs focus:outline-none"
-                />
-              </div>
-
-              {isLoadingModels ? (
-                <span className="text-neutral-400 font-mono text-xs">Fetching models...</span>
-              ) : availableModels.length > 0 ? (
-                <div className="flex items-center gap-2">
-                  <span className="font-display uppercase tracking-wider text-neutral-500">Model:</span>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => handleModelChange(e.target.value)}
-                    className="px-2 py-1 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-950 rounded font-mono text-xs max-w-xs focus:outline-none"
-                  >
-                    {availableModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
-
-            <button
-              onClick={() => setShowKeyInput(false)}
-              className="px-2.5 py-1 font-display uppercase tracking-wider rounded bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition"
-            >
-              Close
-            </button>
-          </div>
-        )}
-
         {/* Audit Error Alert Only */}
         {auditError && (
-          <div className="mt-3 p-2.5 text-xs rounded border border-red-500/30 bg-red-500/10 text-red-500 flex items-center justify-between">
+          <div className="shrink-0 mt-3 p-2.5 text-xs rounded border border-red-500/30 bg-red-500/10 text-red-500 flex items-center justify-between">
             <span>{auditError}</span>
             <button
               onClick={() => setAuditError(null)}
@@ -441,18 +506,135 @@ export default function Page() {
           </div>
         )}
 
-        {/* Main Grid */}
-        <main className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 py-5">
-          {/* Left Column: Canvas & Cadence Graph */}
-          <section className="md:col-span-7 flex flex-col space-y-4">
-            <div className="flex items-center justify-between pb-1 text-xs text-neutral-500">
-              <div className="flex bg-neutral-100 dark:bg-neutral-900/80 p-0.5 rounded border border-neutral-200 dark:border-neutral-800">
+        {/* 3-Pane Workspace: each pane independently scrollable */}
+        <main className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 min-h-0 py-4">
+          {/* Left Pane: Settings */}
+          <aside className="lg:col-span-3 lg:h-full lg:overflow-y-auto min-h-0 pr-1">
+            <div className="p-4 border border-[var(--border)] rounded bg-[var(--card)] space-y-4">
+              <div className="font-display text-lg tracking-wider uppercase text-[var(--fg)] border-b border-[var(--border)] pb-2">
+                Settings
+              </div>
+
+              {/* Theme */}
+              <div className="space-y-1.5">
+                <div className="font-display text-xs uppercase tracking-wider text-[var(--fg-muted)]">
+                  Theme
+                </div>
+                <div className="grid grid-cols-3 gap-1 bg-[var(--muted)] p-0.5 rounded border border-[var(--border)]">
+                  {(['dark', 'light', 'system'] as ThemeMode[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => updateTheme(t)}
+                      className={`py-1 rounded font-display text-xs uppercase tracking-wider transition ${
+                        theme === t
+                          ? 'bg-[var(--tab-active)] text-[var(--tab-active-fg)] shadow-sm'
+                          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Editor Font */}
+              <div className="space-y-1.5">
+                <div className="font-display text-xs uppercase tracking-wider text-[var(--fg-muted)]">
+                  Editor Font
+                </div>
+                <div className="grid grid-cols-3 gap-1 bg-[var(--muted)] p-0.5 rounded border border-[var(--border)]">
+                  {(['sans', 'serif', 'mono'] as EditorFont[]).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => updateFont(f)}
+                      className={`py-1 rounded font-display text-xs uppercase tracking-wider transition ${
+                        editorFont === f
+                          ? 'bg-[var(--tab-active)] text-[var(--tab-active-fg)] shadow-sm'
+                          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font Size */}
+              <div className="space-y-1.5">
+                <div className="font-display text-xs uppercase tracking-wider text-[var(--fg-muted)]">
+                  Font Size
+                </div>
+                <div className="grid grid-cols-3 gap-1 bg-[var(--muted)] p-0.5 rounded border border-[var(--border)]">
+                  {(['sm', 'md', 'lg'] as FontSize[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => updateFontSize(s)}
+                      className={`py-1 rounded font-display text-xs uppercase tracking-wider transition ${
+                        fontSize === s
+                          ? 'bg-[var(--tab-active)] text-[var(--tab-active-fg)] shadow-sm'
+                          : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background Grid */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="font-display text-xs uppercase tracking-wider text-[var(--fg-muted)]">
+                  Bg Grid
+                </span>
+                <button
+                  onClick={toggleGrid}
+                  className="px-2.5 py-0.5 rounded font-display text-xs uppercase tracking-wider border border-[var(--border)] bg-[var(--muted)] text-[var(--fg)]"
+                >
+                  {showGrid ? 'On' : 'Off'}
+                </button>
+              </div>
+
+              {/* API Key & Model */}
+              <div className="space-y-2 pt-2 border-t border-[var(--border)]">
+                <div className="font-display text-xs uppercase tracking-wider text-[var(--fg-muted)]">
+                  API Key (Groq / Gemini)
+                </div>
+                <input
+                  type="password"
+                  placeholder="gsk_... or Gemini key"
+                  value={apiKey}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-[var(--border)] bg-[var(--input-bg)] text-[var(--fg)] rounded font-mono text-xs focus:outline-none"
+                />
+                {isLoadingModels ? (
+                  <p className="text-xs text-[var(--fg-muted)] font-mono">Fetching models...</p>
+                ) : availableModels.length > 0 ? (
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-[var(--border)] bg-[var(--input-bg)] text-[var(--fg)] rounded font-mono text-xs focus:outline-none"
+                  >
+                    {availableModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+            </div>
+          </aside>
+
+          {/* Center Pane: Canvas */}
+          <section className="lg:col-span-5 lg:h-full min-h-0 flex flex-col space-y-3">
+            <div className="shrink-0 flex items-center justify-between pb-1 text-xs text-[var(--fg-muted)]">
+              <div className="flex bg-[var(--muted)] p-0.5 rounded border border-[var(--border)]">
                 <button
                   onClick={() => setView('draft')}
                   className={`px-3 py-1 rounded font-display tracking-wider uppercase text-xs transition ${
                     view === 'draft'
-                      ? 'bg-white dark:bg-neutral-800 font-medium text-neutral-900 dark:text-neutral-100 shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
+                      ? 'bg-[var(--tab-active)] font-medium text-[var(--tab-active-fg)] shadow-sm'
+                      : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
                   }`}
                 >
                   Edit Draft
@@ -461,8 +643,8 @@ export default function Page() {
                   onClick={() => setView('story')}
                   className={`px-3 py-1 rounded font-display tracking-wider uppercase text-xs transition flex items-center gap-1.5 ${
                     view === 'story'
-                      ? 'bg-white dark:bg-neutral-800 font-medium text-neutral-900 dark:text-neutral-100 shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
+                      ? 'bg-[var(--tab-active)] font-medium text-[var(--tab-active-fg)] shadow-sm'
+                      : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
                   }`}
                 >
                   <span>Story Flow</span>
@@ -470,37 +652,41 @@ export default function Page() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 font-display uppercase tracking-wider text-xs">
+              <div className="flex items-center gap-2.5 font-display uppercase tracking-wider text-xs">
                 <span className={isOverXLimit ? 'text-red-500 font-bold' : ''}>
                   {text.length}{mode === 'x' ? ' / 280' : ' chars'}
                 </span>
-                <span>{activeAnalysis.wordCount} words</span>
+                <span>
+                  {activeAnalysis.wordCount}w (${activeAnalysis.wordCount * 10})
+                </span>
+                {activeAnalysis.readingGrade > 0 && (
+                  <span className={activeAnalysis.readingGrade > 10 ? 'text-amber-500' : ''}>
+                    Grade {activeAnalysis.readingGrade}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Canvas View */}
             {view === 'draft' ? (
-              /* Single Raw Input in Edit Draft */
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Write raw draft here..."
-                className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm font-sans text-sm leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 min-h-[260px]"
+                className={`flex-1 min-h-[300px] lg:min-h-0 w-full p-4 border border-[var(--border)] rounded bg-[var(--card)] text-[var(--fg)] leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-neutral-400 overflow-y-auto ${editorTypography}`}
               />
             ) : (
-              /* Continuous Colored Text in Story Flow Only */
-              <div className="space-y-3">
+              <div className="flex-1 min-h-0 flex flex-col space-y-3">
                 <div
-                  className="w-full p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm text-sm leading-relaxed min-h-[200px]"
+                  className={`flex-1 min-h-[260px] lg:min-h-0 overflow-y-auto w-full p-4 border border-[var(--border)] rounded bg-[var(--card)] leading-relaxed ${editorTypography}`}
                 >
                   {activeAnalysis.sentences.length === 0 ? (
-                    <p className="text-neutral-500 font-display uppercase tracking-wider">
+                    <p className="text-[var(--fg-muted)] font-display uppercase tracking-wider">
                       Write text in Edit Draft to view story flow.
                     </p>
                   ) : (
                     <p className="inline leading-relaxed">
                       {activeAnalysis.sentences.map((s, idx) => {
-                        const color = sentenceColors[idx] || { textColor: 'text-neutral-400', hex: '#9ca3af' };
+                        const color = sentenceColors[idx] || { textColor: 'text-[var(--fg-muted)]', hex: '#9ca3af' };
                         return (
                           <span
                             key={s.id || idx}
@@ -508,7 +694,7 @@ export default function Page() {
                             className={`${color.textColor} ${
                               s.leaks.length > 0 ? 'underline decoration-wavy decoration-red-500' : ''
                             } ${
-                              selectedSentenceIndex === idx ? 'bg-white/10 px-1 py-0.5 rounded' : ''
+                              selectedSentenceIndex === idx ? 'bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded' : ''
                             } cursor-pointer hover:opacity-80 transition-opacity mr-1.5`}
                             title={`Click to inspect • ${ROLE_LABELS[s.role]} • ${s.wordCount} words`}
                           >
@@ -520,26 +706,25 @@ export default function Page() {
                   )}
                 </div>
 
-                {/* Selected Sentence Inspector */}
                 {selectedSentence && (
-                  <div className="p-3.5 rounded border border-neutral-200 dark:border-neutral-800/80 bg-white/40 dark:bg-neutral-900/50 backdrop-blur-sm text-xs space-y-1">
-                    <div className="flex items-center justify-between text-neutral-400">
+                  <div className="shrink-0 p-3.5 rounded border border-[var(--border)] bg-[var(--card)] text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[var(--fg-muted)]">
                       <span className="font-display uppercase tracking-wider text-xs">
                         Sentence {selectedSentenceIndex! + 1} ({ROLE_LABELS[selectedSentence.role]} • {selectedSentence.wordCount}w)
                       </span>
                       <button
                         onClick={() => setSelectedSentenceIndex(null)}
-                        className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200 text-sm"
+                        className="hover:text-[var(--fg)] text-sm"
                       >
                         &times;
                       </button>
                     </div>
                     {selectedSentence.tip ? (
-                      <p className="text-neutral-700 dark:text-neutral-300 italic">
+                      <p className="text-[var(--fg)] italic">
                         Coach Tip: {selectedSentence.tip}
                       </p>
                     ) : (
-                      <p className="text-neutral-500">
+                      <p className="text-[var(--fg-muted)]">
                         {selectedSentence.leaks.length > 0
                           ? `Leaks: ${selectedSentence.leaks.join(', ')}`
                           : 'Sentence structurally sound.'}
@@ -549,65 +734,103 @@ export default function Page() {
                 )}
               </div>
             )}
-
-            {/* Visual Cadence Line Graph */}
-            <CadenceLineGraph
-              sentences={activeAnalysis.sentences}
-              sentenceColors={sentenceColors}
-              selectedIndex={selectedSentenceIndex}
-              onSelect={(idx) => setSelectedSentenceIndex(idx)}
-            />
           </section>
 
-          {/* Right Column: Pre-Publish Checklist & Ask Yourself This */}
-          <section className="md:col-span-5 flex flex-col space-y-6">
+          {/* Right Pane: Pre-Publish Checklist, Cadence Rhythm Graph, Ask Yourself This */}
+          <section className="lg:col-span-4 lg:h-full lg:overflow-y-auto min-h-0 flex flex-col space-y-4 pr-1">
             {/* Pre-Publish Checklist */}
-            <div className="p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm space-y-3">
-              <div className="font-display text-lg tracking-wider uppercase text-neutral-800 dark:text-neutral-200 border-b border-neutral-200 dark:border-neutral-800/80 pb-2">
+            <div className="p-4 border border-[var(--border)] rounded bg-[var(--card)] space-y-3">
+              <div className="font-display text-lg tracking-wider uppercase text-[var(--fg)] border-b border-[var(--border)] pb-2">
                 Pre-Publish Checklist
               </div>
-              <ul className="space-y-2.5 text-sm">
+              <ul className="space-y-2 text-sm">
                 {[
                   { key: 'strongHook', label: 'Hook punchiness' },
                   { key: 'clearOutcome', label: 'Clear outcome ("So What?")' },
                   { key: 'tensionPivot', label: 'Tension / Conflict beat' },
                   { key: 'concreteProof', label: 'Concrete proof (Deaf & Mute)' },
                   { key: 'conciseWords', label: 'No $10-word copy leaks' },
-                  { key: 'variedCadence', label: 'Varied sentence cadence' }
+                  { key: 'variedCadence', label: 'Varied sentence cadence' },
+                  ...(mode === 'pitch'
+                    ? [
+                        { key: 'giveBeforeAsk', label: 'Give before ask (Upfront work)' },
+                        { key: 'hasUrgency', label: 'Priority / Cost of inaction' },
+                        { key: 'hasCta', label: 'Clear CTA (Who/What/How)' }
+                      ]
+                    : [])
                 ].map(({ key, label }) => {
                   const passed = activeAnalysis.checklist[key as keyof typeof activeAnalysis.checklist];
                   return (
-                    <li key={key} className="flex items-center gap-2.5">
-                      <span className={`text-xs font-mono font-bold ${passed ? 'text-emerald-500' : 'text-neutral-500'}`}>
-                        {passed ? '[x]' : '[ ]'}
-                      </span>
-                      <span className={passed ? 'text-neutral-800 dark:text-neutral-200 font-medium' : 'text-neutral-500'}>
-                        {label}
-                      </span>
+                    <li key={key} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`text-xs font-mono font-bold ${passed ? 'text-emerald-600 dark:text-emerald-500' : 'text-[var(--fg-muted)]'}`}>
+                          {passed ? '[x]' : '[ ]'}
+                        </span>
+                        <span className={passed ? 'text-[var(--fg)] font-medium' : 'text-[var(--fg-muted)]'}>
+                          {label}
+                        </span>
+                      </div>
+                      {key === 'clearOutcome' && !passed && text.trim() && (
+                        <button
+                          onClick={handleSoWhatDrill}
+                          disabled={isDrilling}
+                          className="font-display text-[11px] tracking-wider uppercase text-amber-600 dark:text-amber-500 hover:underline disabled:opacity-50"
+                        >
+                          {isDrilling ? 'Drilling...' : 'So What? Drill'}
+                        </button>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             </div>
 
+            {/* Cadence Rhythm Graph */}
+            <CadenceLineGraph
+              sentences={activeAnalysis.sentences}
+              sentenceColors={sentenceColors}
+              selectedIndex={selectedSentenceIndex}
+              onSelect={(idx) => setSelectedSentenceIndex(idx)}
+            />
+
             {/* Ask Yourself This */}
-            <div className="p-4 border border-neutral-200 dark:border-neutral-800/80 rounded bg-white/30 dark:bg-neutral-900/30 backdrop-blur-sm space-y-3">
-              <div className="font-display text-lg tracking-wider uppercase text-neutral-800 dark:text-neutral-200 border-b border-neutral-200 dark:border-neutral-800/80 pb-2 flex items-center justify-between">
+            <div className="p-4 border border-[var(--border)] rounded bg-[var(--card)] space-y-3">
+              <div className="font-display text-lg tracking-wider uppercase text-[var(--fg)] border-b border-[var(--border)] pb-2 flex items-center justify-between">
                 <span>Ask Yourself This</span>
-                {auditResult && (
-                  <span className="font-display text-xs text-emerald-500 tracking-wider lowercase">
-                    active
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {text.trim() && (
+                    <button
+                      onClick={handleSoWhatDrill}
+                      disabled={isDrilling}
+                      className="font-display text-xs tracking-wider uppercase text-[var(--fg-muted)] hover:text-[var(--fg)] disabled:opacity-50"
+                    >
+                      {isDrilling ? 'Drilling...' : 'So What? Drill'}
+                    </button>
+                  )}
+                  {auditResult && (
+                    <span className="font-display text-xs text-emerald-500 tracking-wider lowercase">
+                      active
+                    </span>
+                  )}
+                </div>
               </div>
+              {soWhatChain && soWhatChain.length > 0 && (
+                <ul className="space-y-1.5 p-3 text-xs rounded border border-amber-500/30 bg-amber-500/5 text-[var(--fg)]">
+                  {soWhatChain.map((step, i) => (
+                    <li key={i} className={i === soWhatChain.length - 1 ? 'font-medium text-amber-600 dark:text-amber-500' : ''}>
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {activeAnalysis.coachingChallenges.length === 0 ? (
-                <p className="text-xs text-neutral-500">All checks pass. Ready to ship.</p>
+                <p className="text-xs text-[var(--fg-muted)]">All checks pass. Ready to ship.</p>
               ) : (
                 <ul className="space-y-2.5">
                   {activeAnalysis.coachingChallenges.map((challenge, i) => (
                     <li
                       key={i}
-                      className="p-3 text-xs leading-relaxed rounded border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 bg-neutral-100/50 dark:bg-neutral-900/60"
+                      className="p-3 text-xs leading-relaxed rounded border border-[var(--border)] text-[var(--fg)] bg-[var(--muted)]"
                     >
                       {challenge}
                     </li>

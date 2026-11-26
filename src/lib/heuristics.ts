@@ -15,15 +15,37 @@ const PROOF_REGEX = /(\b\d+(\.\d+)?%|\$\d+(\.\d+)?|\b\d+[kKmMbB]\b|\b\d+\s*(imag
 const TENSION_REGEX = /\b(but|however|yet|although|though|instead|except|whereas|nevertheless|bottleneck|wall|failed|flaw|problem|conflict|trap|mistake)\b/i;
 const RESOLUTION_REGEX = /\b(therefore|so|thus|hence|solution|result|built|created|shipped|fixed|solved|unlocked|discovered|now|outcome)\b/i;
 const OUTCOME_REGEX = /\b(save|saving|make|making|cut|cutting|reduce|reducing|boost|growth|revenue|profit|scale|convert|speed|hire|landed)\b/i;
+const CTA_REGEX = /(\b(dm|reply|book|schedule|click|try|join|sign up|reach out|let's talk|grab|link|calendar|call)\b|\?$)/i;
+const URGENCY_REGEX = /\b(now|today|this week|before|cost of|losing|wasting|missing|limited|deadline|every day|every month|burn|risk)\b/i;
+const GIVE_BEFORE_ASK_REGEX = /\b(attached|breakdown|audit|feedback|built|put together|noticed|spotted|redesign|mockup|sample|drafted|recorded|loom)\b/i;
+
+const PITCH_LEAK_PATTERNS: { regex: RegExp; label: string }[] = [
+  { regex: /\bwould love to connect\b/gi, label: 'Generic opener ("would love to connect")' },
+  { regex: /\bpick your brain\b/gi, label: 'High-friction ask ("pick your brain")' },
+  { regex: /\bto whom it may concern\b/gi, label: 'Impersonal greeting' },
+  { regex: /\bfollowing up\b/gi, label: 'Weak opener ("following up")' },
+  { regex: /\b(hard worker|fast learner|team player)\b/gi, label: 'Telling instead of showing' }
+];
+
+function countSyllables(word: string): number {
+  const cleaned = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (cleaned.length <= 3) return cleaned.length > 0 ? 1 : 0;
+  const normalized = cleaned.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '').replace(/^y/, '');
+  const matches = normalized.match(/[aeiouy]{1,2}/g);
+  return matches ? Math.max(1, matches.length) : 1;
+}
+
+function computeReadingGrade(text: string, sentenceCount: number, wordCount: number): number {
+  if (wordCount === 0 || sentenceCount === 0) return 0;
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const syllables = words.reduce((sum, w) => sum + countSyllables(w), 0);
+  const grade = 0.39 * (wordCount / sentenceCount) + 11.8 * (syllables / wordCount) - 15.59;
+  return Math.max(1, Math.min(18, Math.round(grade)));
+}
 
 export function splitIntoSentences(text: string): string[] {
   if (!text || !text.trim()) return [];
 
-  // Protect decimals (e.g. 1.8GB, 94.2%) and abbreviations (e.g. e.g., i.e., vs., Dr.)
-  // Split on [.!?] only when:
-  // 1. Not preceded by a digit and dot (e.g. 1. or 94.)
-  // 2. Not preceded by common abbreviations
-  // 3. Followed by whitespace and capital letter, quote, or end of text
   const sentenceEndRegex = /(?<=[.!?])(?<!\d\.)(?<!\b(?:e\.g|i\.e|vs|mr|mrs|dr|prof)\.)\s+(?=[A-Z0-9"'\n]|$)/gi;
 
   const paragraphs = text.split(/\n+/);
@@ -46,11 +68,11 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
   const totalChars = text.length;
   const totalWords = isBlank ? 0 : trimmed.split(/\s+/).filter(Boolean).length;
   const readTimeSeconds = Math.max(0, Math.round((totalWords / 200) * 60));
+  const readingGrade = isBlank ? 0 : computeReadingGrade(trimmed, rawSentences.length, totalWords);
 
   let monotonyStreaks: boolean[] = new Array(rawSentences.length).fill(false);
   const wordCounts = rawSentences.map(s => s.trim().split(/\s+/).filter(Boolean).length);
 
-  // Cadence Monotony: 3+ consecutive sentences with identical word count
   let currentStreak = 1;
   for (let i = 1; i < wordCounts.length; i++) {
     if (wordCounts[i] === wordCounts[i - 1] && wordCounts[i] > 2) {
@@ -83,7 +105,8 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
     if (hasOutcome) hasOutcomeOverall = true;
 
     const leaks: string[] = [];
-    for (const pattern of FILLER_PATTERNS) {
+    const activePatterns = mode === 'pitch' ? [...FILLER_PATTERNS, ...PITCH_LEAK_PATTERNS] : FILLER_PATTERNS;
+    for (const pattern of activePatterns) {
       if (pattern.regex.test(sentence)) {
         leaks.push(pattern.label);
         totalLeaksCount++;
@@ -114,6 +137,10 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
     };
   });
 
+  const hasCtaOverall = !isBlank && CTA_REGEX.test(trimmed);
+  const hasUrgencyOverall = !isBlank && URGENCY_REGEX.test(trimmed);
+  const hasGiveOverall = !isBlank && GIVE_BEFORE_ASK_REGEX.test(trimmed);
+
   const challenges: string[] = [];
   if (isBlank) {
     challenges.push("Write or paste a draft to begin real-time evaluation.");
@@ -130,18 +157,33 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
     if (monotonyStreaks.some(Boolean)) {
       challenges.push("Monotonous cadence detected: 3+ consecutive sentences have the exact same length. Vary your sentence rhythm.");
     }
+    if (readingGrade > 10) {
+      challenges.push(`Fire Fighter Test: Reading level is Grade ${readingGrade}. Simplify words and split dense clauses so it reads at Grade 8 or lower.`);
+    }
     if (mode === 'x' && totalChars > 280) {
       challenges.push(`X post is ${totalChars - 280} characters over the 280 limit. Cut ruthlessly.`);
+    }
+    if (mode === 'pitch') {
+      if (!hasGiveOverall) {
+        challenges.push("Permissionless pitch: Lead with upfront value (feedback, breakdown, or sample) so the ask feels like a give.");
+      }
+      if (!hasUrgencyOverall) {
+        challenges.push("Priority missing: Why should they act now? Highlight urgency or the cost of inaction.");
+      }
+      if (!hasCtaOverall) {
+        challenges.push("CTA missing: Specify Who, What, When, and How they should respond.");
+      }
     }
   }
 
   const checklist: PrePublishChecklist = {
     strongHook: !isBlank && analyzedSentences.length > 0 && analyzedSentences[0].wordCount <= 25,
-    clearOutcome: !isBlank && (hasOutcomeOverall || (mode === 'pitch' && totalWords > 10)),
+    clearOutcome: !isBlank && hasOutcomeOverall,
     tensionPivot: !isBlank && hasTensionOverall,
     concreteProof: !isBlank && hasProofOverall,
     conciseWords: !isBlank && totalLeaksCount === 0,
     variedCadence: !isBlank && rawSentences.length > 1 && !monotonyStreaks.some(Boolean),
+    ...(mode === 'pitch' ? { hasCta: hasCtaOverall, hasUrgency: hasUrgencyOverall, giveBeforeAsk: hasGiveOverall } : {}),
   };
 
   return {
@@ -150,6 +192,7 @@ export function analyzeLocally(text: string, mode: WritingMode = 'x'): AnalysisR
     charCount: totalChars,
     wordCount: totalWords,
     readTimeSeconds,
+    readingGrade,
     coachingChallenges: challenges.slice(0, 3),
   };
 }

@@ -22,6 +22,9 @@ export interface PrePublishChecklist {
   concreteProof: boolean;
   conciseWords: boolean;
   variedCadence: boolean;
+  hasCta?: boolean;
+  hasUrgency?: boolean;
+  giveBeforeAsk?: boolean;
 }
 
 export interface AnalysisResult {
@@ -30,6 +33,7 @@ export interface AnalysisResult {
   charCount: number;
   wordCount: number;
   readTimeSeconds: number;
+  readingGrade: number;
   coachingChallenges: string[];
+  soWhatChain?: string[];
 }
-
